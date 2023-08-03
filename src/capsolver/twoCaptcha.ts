@@ -1,6 +1,5 @@
+import axios from 'axios';
 import {z} from 'zod';
-
-import {got} from 'got';
 
 // https://2captcha.com/2captcha-api#solving_normal_captcha
 
@@ -19,20 +18,24 @@ async function sendSolveCaptchaRequest({
   base64Buffer,
   apiKey,
 }: TwoCaptchaRequest) {
-  const response = await got
-    .post('http://2captcha.com/in.php', {
-      form: {
-        key: apiKey,
-        method: 'base64',
-        body: base64Buffer,
-        // tells the server to send the response as JSON
-        json: 1,
-        numeric: 1,
+  const {data} = await axios.post(
+    'http://2captcha.com/in.php',
+    {
+      key: apiKey,
+      method: 'base64',
+      body: base64Buffer,
+      // tells the server to send the response as JSON
+      json: 1,
+      numeric: 1,
+    },
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
       },
-    })
-    .json();
-  console.log({response});
-  const result = twoCaptchaResponseSchema.safeParse(response);
+    }
+  );
+
+  const result = twoCaptchaResponseSchema.safeParse(data);
   if (!result.success || result.data.status === 0) {
     throw new Error('Solve captcha failed');
   }
@@ -51,12 +54,11 @@ async function getCaptchaResult({
   retry?: number;
   delay?: number;
 }): Promise<string> {
-  const response = await got
-    .get(
-      `http://2captcha.com/res.php?key=${apiKey}&action=get&id=${requestId}&json=1`
-    )
-    .json();
-  const result = twoCaptchaResponseSchema.safeParse(response);
+  const response = await axios.get(
+    `http://2captcha.com/res.php?key=${apiKey}&action=get&id=${requestId}&json=1`
+  );
+
+  const result = twoCaptchaResponseSchema.safeParse(response.data);
 
   if (!result.success) {
     throw new Error('Solve captcha failed');
