@@ -4,6 +4,8 @@ import {z} from 'zod';
 config();
 const envSchema = z.object({
   TWO_CAPTCHA_KEY: z.string(),
+  E_INVOICE_PHONE: z.string(),
+  E_INVOICE_PASSWORD: z.string(),
 });
 
 export function getEnv() {
