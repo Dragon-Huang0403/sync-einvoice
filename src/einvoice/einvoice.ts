@@ -1,8 +1,9 @@
 import {format} from 'date-fns';
 import puppeteer, {Page} from 'puppeteer';
+import {z} from 'zod';
 import capsolver from '../capsolver';
 import {getEnv} from '../util/env';
-import {listInvoiceSchema} from './schema';
+import {invoiceDetailSchema, invoiceSchema, listInvoiceSchema} from './schema';
 
 async function login(page: Page) {
   const loginPopupBtnSelector = '#loginBtn';
@@ -60,11 +61,11 @@ async function waitForListInvoiceReturn(page: Page) {
   return data;
 }
 
-async function searchInvoice(page: Page) {
+async function searchInvoice(page: Page, beginDate: Date, endDate: Date) {
   const beginDateInputSelector = '#beginDate';
   const endDateInputSelector = '#endDate';
-  await handleSelectDate(page, beginDateInputSelector, new Date('2023/07/01'));
-  await handleSelectDate(page, endDateInputSelector, new Date('2023/07/31'));
+  await handleSelectDate(page, beginDateInputSelector, beginDate);
+  await handleSelectDate(page, endDateInputSelector, endDate);
 
   await sleep(2000);
   await page.click(endDateInputSelector);
@@ -95,8 +96,57 @@ async function searchInvoice(page: Page) {
   return listInvoices;
 }
 
-export async function crawlInvoices() {
-  const browser = await puppeteer.launch({headless: false});
+async function fetchInvoiceDetail(
+  page: Page,
+  csrfToken: string,
+  invoice: z.infer<typeof invoiceSchema>
+) {
+  const response = await page.evaluate(
+    async reqBody => {
+      const {invoicenumber, invoicedate, selleridentifier} = reqBody.invoice;
+      const {transactionId} = await fetch(
+        'https://www.einvoice.nat.gov.tw/APCONSUMER/Menber/invoice/getMemberInvoice',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': reqBody.csrfToken,
+          },
+          body: JSON.stringify({
+            invoiceNumber: invoicenumber,
+            invoiceDate: new Date(invoicedate).toISOString(),
+            selleridentifier,
+          }),
+        }
+      ).then(resp => resp.json());
+      const resp = await fetch(
+        'https://www.einvoice.nat.gov.tw/APCONSUMER/Menber/invoice/pageMemberInvoiceDetail',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': reqBody.csrfToken,
+          },
+          body: JSON.stringify({
+            transactionId,
+            pager: {
+              size: 30,
+              page: 0,
+            },
+          }),
+        }
+      );
+      return resp.json();
+    },
+    {csrfToken, invoice}
+  );
+
+  const {content} = invoiceDetailSchema.parse(response);
+  return {...invoice, content};
+}
+
+export async function crawlInvoices(beginDate: Date, endDate: Date) {
+  const browser = await puppeteer.launch({headless: 'new'});
   const page = await browser.newPage();
 
   const timeout = 60000;
@@ -108,15 +158,24 @@ export async function crawlInvoices() {
 
   await login(page);
 
-  await Promise.all([
+  const [resp] = await Promise.all([
     page.waitForResponse(
       'https://www.einvoice.nat.gov.tw/APCONSUMER/BTC502W/rest/getCarrierList'
     ),
     page.waitForSelector('.panel-body', {visible: true}),
   ]);
 
-  const data = await searchInvoice(page);
-  return data;
+  const csrfToken = resp.request().headers()['x-csrf-token'];
+
+  const data = await searchInvoice(page, beginDate, endDate);
+
+  const invoices = await Promise.all(
+    data.map(invoice => fetchInvoiceDetail(page, csrfToken, invoice))
+  );
+
+  await browser.close();
+
+  return invoices;
 }
 
 async function sleep(ms: number) {

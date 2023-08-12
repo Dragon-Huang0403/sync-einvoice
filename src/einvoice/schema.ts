@@ -8,7 +8,7 @@ const alertSchema = z.object({
   occurrence: z.string(),
 });
 
-const contentSchema = z.object({
+export const invoiceSchema = z.object({
   carriertype: z.string(),
   carrierid2: z.string(),
   carrierName: z.string(),
@@ -34,7 +34,7 @@ const contentSchema = z.object({
 });
 
 const dataSchema = z.object({
-  content: z.array(contentSchema),
+  content: z.array(invoiceSchema),
   number: z.number(),
   size: z.number(),
   totalPages: z.number(),
@@ -46,4 +46,25 @@ const dataSchema = z.object({
 export const listInvoiceSchema = z.object({
   data: dataSchema,
   alerts: z.array(alertSchema),
+});
+
+export const invoiceDetailSchema = z.object({
+  content: z.array(
+    z.object({
+      description: z.string(),
+      unitprice: z.string(),
+      quantity: z.string(),
+      amount: z.number(),
+      carrierId2: z.string(),
+      displayUnitprice: z.string(),
+      displayQuantity: z.string(),
+      displayAmount: z.string(),
+    })
+  ),
+  number: z.number(),
+  size: z.number(),
+  totalPages: z.number(),
+  first: z.boolean(),
+  last: z.boolean(),
+  totalElements: z.number(),
 });
