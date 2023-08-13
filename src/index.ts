@@ -64,41 +64,44 @@ async function main() {
 
   let id = Number(storedData[storedData.length - 1].Id) + 1;
 
-  invoices.flat().forEach(invoice => {
-    if (storedData.some(d => d.uid === invoice.invoicenumber)) {
-      return;
-    }
-    const date = new Date(invoice.invoicedate);
-    const notes = [`發票號碼:${invoice.displayInvoiceNumber}`];
-    invoice.content.forEach(c => {
-      const note = `${c.description} [NT$${c.displayAmount}] x ${c.displayQuantity}`;
-      notes.push(note);
+  invoices
+    .flat()
+    .sort((a, b) => a.invoicedate - b.invoicedate)
+    .forEach(invoice => {
+      if (storedData.some(d => d.uid === invoice.invoicenumber)) {
+        return;
+      }
+      const date = new Date(invoice.invoicedate);
+      const notes = [`發票號碼:${invoice.displayInvoiceNumber}`];
+      invoice.content.forEach(c => {
+        const note = `${c.description} [NT$${c.displayAmount}] x ${c.displayQuantity}`;
+        notes.push(note);
+      });
+
+      const newRow: Record<string, string> = {
+        Id: String(id++),
+        Currency: 'TWD',
+        Amount: invoice.displayTotalAmount + '.0',
+        Category: '電子發票',
+        'Sub-Category': '手機條碼',
+        Date: format(date, 'yyyyMMdd'),
+        'Expense(Transfer Out)': '信用卡',
+        'Income(Transfer In)': '',
+        Note: notes.join(' \n '),
+        Periodic: '',
+        Project: '',
+        'Payee/Payer': '',
+        uid: invoice.invoicenumber,
+        Time: '',
+      };
+
+      const rowString = [] as string[];
+      columns.forEach(c => {
+        rowString.push(`"${newRow[c]}"`);
+      });
+
+      fs.appendFileSync(filename, rowString.join(',') + '\r\n');
     });
-
-    const newRow: Record<string, string> = {
-      Id: String(id++),
-      Currency: 'TWD',
-      Amount: invoice.displayTotalAmount + '.0',
-      Category: '電子發票',
-      'Sub-Category': '手機條碼',
-      Date: format(date, 'yyyyMMdd'),
-      'Expense(Transfer Out)': '信用卡',
-      'Income(Transfer In)': '',
-      Note: notes.join(' \n '),
-      Periodic: '',
-      Project: '',
-      'Payee/Payer': '',
-      uid: invoice.invoicenumber,
-      Time: '',
-    };
-
-    const rowString = [] as string[];
-    columns.forEach(c => {
-      rowString.push(`"${newRow[c]}"`);
-    });
-
-    fs.appendFileSync(filename, rowString.join(',') + '\r\n');
-  });
 }
 
 main();
